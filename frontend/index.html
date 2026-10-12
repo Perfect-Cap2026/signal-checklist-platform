@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Signal Checklist Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:20px}
+    .top{display:flex;align-items:center;gap:12px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{padding:8px;border:1px solid #ddd;text-align:left}
+    .pass{color:green;font-weight:600}
+    .fail{color:red;font-weight:600}
+  </style>
+</head>
+<body>
+  <h2>Signal Checklist Dashboard</h2>
+  <div class="top">
+    <button id="refresh">Refresh</button>
+    <div id="metrics"></div>
+  </div>
+  <canvas id="passChart" height="80"></canvas>
+
+  <h3>Recent signals</h3>
+  <table>
+    <thead><tr><th>Time</th><th>Instrument</th><th>TF</th><th>Overall</th><th>Reason (summary)</th></tr></thead>
+    <tbody id="signals"></tbody>
+  </table>
+
+<script>
+const API_BASE = location.origin.replace(/:\d+$/,':8000');
+async function fetchMetrics(){
+  const r = await fetch(API_BASE+'/metrics');
+  return r.json();
+}
+async function fetchSignals(){
+  const r = await fetch(API_BASE+'/signals?limit=200');
+  return r.json();
+}
+function summarizeReason(reason){
+  try{ const r = typeof reason==='string'? JSON.parse(reason): reason; return Object.keys(r).slice(0,3).join(', ')}catch(e){return ''}
+}
+async function refresh(){
+  const m = await fetchMetrics();
+  document.getElementById('metrics').textContent = `Total: ${m.total_signals} • Passed: ${m.passed} • Pass rate: ${(m.pass_rate*100).toFixed(1)}%`;
+  const s = await fetchSignals();
+  const tbody = document.getElementById('signals'); tbody.innerHTML='';
+  s.forEach(row=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${new Date(row.signal_time).toLocaleString()}</td><td>${row.instrument}</td><td>${row.timeframe}</td><td class="${row.overall_pass? 'pass':'fail'}">${row.overall_pass? 'PASS':'BLOCKED'}</td><td>${summarizeReason(row.reason)}</td>`
+    tbody.appendChild(tr);
+  });
+  drawChart(m.passed || 0, m.total_signals - (m.passed||0));
+}
+function drawChart(passed, failed){
+  const ctx = document.getElementById('passChart').getContext('2d');
+  if(window.myChart) window.myChart.destroy();
+  window.myChart = new Chart(ctx, {type:'doughnut', data:{labels:['Passed','Blocked'], datasets:[{data:[passed,failed], backgroundColor:['#0f9d58','#d93025']}]} });
+}
+document.getElementById('refresh').addEventListener('click', refresh);
+refresh();
+</script>
+</body>
+</html>
